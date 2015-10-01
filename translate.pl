@@ -21,8 +21,6 @@ our %IRSSI = (
 Irssi::settings_add_str('translate', 'translate_list', '{}');
 # The language you prefer to use.
 Irssi::settings_add_str('translate', 'translate_default_target_lang', 'en');
-# Your Google Translate API key.
-Irssi::settings_add_str('translate', 'translate_api_key', '');
 # Number of lines in scrollback to translate upon adding translation rule.
 Irssi::settings_add_int('translate', 'translate_scrollback_lines', 3);
 
@@ -160,25 +158,24 @@ sub translate {
 	my ($message, $source_lang, $target_lang) = @_;
 
 	my $ua = new LWP::UserAgent;
-	$ua->default_header('X-HTTP-Method-Override' => 'GET');
+    $ua->env_proxy;
+    $ua->default_header("User-Agent" => "curl/7.32.0");
 	my $payload = {
-			'key'		=>	Irssi::settings_get_str('translate_api_key'),
 			'q'			=>	$message,
-			'target'	=>	$target_lang,
-			'format'	=>	'text'
+			'langpair'  =>	"$source_lang|$target_lang",
 	};
-	$payload->{source} = $source_lang if $source_lang;
+    my $url = new URI("http://api.mymemory.translated.net/get");
+    $url->query_form(%{$payload});
+	my $response = $ua->get($url);
 
-	my $response = $ua->post("https://www.googleapis.com/language/translate/v2", $payload);
 	if ($response->is_success) {
 		my $json = $response->decoded_content;
 		my $decoded = decode_json $json;
-		my $translation = $decoded->{'data'}->{'translations'}->[0]->{'translatedText'};
-		my $source_lang = $decoded->{'data'}->{'translations'}->[0]->{'detectedSourceLanguage'} || $source_lang;
+		my $translation = $decoded->{'responseData'}->{'translatedText'};
 
 		return $translation, $source_lang, $target_lang;
 	} else {
-		print CRAP "%r$IRSSI{name}%n: Google responded with error: " . $response->status_line;
+		print CRAP "%r$IRSSI{name}%n: MyMemory responded with error: " . $response->status_line;
 		print CRAP "Request details:";
 		print Dumper($payload);
 		print CRAP "Response content:";
